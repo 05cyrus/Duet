@@ -1,0 +1,75 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+
+    "presence": {
+      "$uid": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    },
+
+    "location": {
+      "$coupleId": {
+        ".read": "auth != null && root.child('coupleMembers').child($coupleId).child(auth.uid).exists()",
+        "$uid": {
+          ".write": "auth != null && auth.uid === $uid && root.child('coupleMembers').child($coupleId).child(auth.uid).exists()",
+          ".validate": "newData.hasChildren(['latitude','longitude','timestamp'])"
+        }
+      }
+    },
+
+    "mood": {
+      "$coupleId": {
+        ".read": "auth != null && root.child('coupleMembers').child($coupleId).child(auth.uid).exists()",
+        "$uid": {
+          ".write": "auth != null && auth.uid === $uid && root.child('coupleMembers').child($coupleId).child(auth.uid).exists()"
+        }
+      }
+    },
+
+    "heartbeat": {
+      "$coupleId": {
+        ".read": "auth != null && root.child('coupleMembers').child($coupleId).child(auth.uid).exists()",
+        "$uid": {
+          ".write": "auth != null && root.child('coupleMembers').child($coupleId).child(auth.uid).exists()"
+        }
+      }
+    },
+
+    "missingYou": {
+      "$coupleId": {
+        ".read": "auth != null && root.child('coupleMembers').child($coupleId).child(auth.uid).exists()",
+        "$uid": {
+          ".write": "auth != null && root.child('coupleMembers').child($coupleId).child(auth.uid).exists()"
+        }
+      }
+    },
+
+    "audioSignal": {
+      "$coupleId": {
+        ".read": "auth != null && root.child('coupleMembers').child($coupleId).child(auth.uid).exists()",
+        ".write": "auth != null && root.child('coupleMembers').child($coupleId).child(auth.uid).exists()"
+      }
+    },
+
+    "typing": {
+      "$coupleId": {
+        ".read": "auth != null && root.child('coupleMembers').child($coupleId).child(auth.uid).exists()",
+        "$uid": {
+          ".write": "auth != null && auth.uid === $uid"
+        }
+      }
+    },
+
+    "coupleMembers": {
+      "$coupleId": {
+        ".read": "auth != null",
+        "$uid": {
+          ".write": "auth != null && auth.uid === $uid"
+        }
+      }
+    }
+  }
+}

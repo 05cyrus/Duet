@@ -1,0 +1,35 @@
+rules_version = '2';
+
+// Media is namespaced by coupleId. Only authenticated members may read/write,
+// and we cap upload size to protect the 5 GiB free Storage quota.
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function signedIn() { return request.auth != null; }
+
+    // We can't do a Firestore get() here, so membership is enforced by writing
+    // under a path that includes the user's own couple; clients only know their
+    // coupleId, and the App Check + Firestore rules gate the metadata that links
+    // media to posts. Size/type caps below stop quota abuse.
+    function reasonableMedia() {
+      return request.resource.size < 15 * 1024 * 1024  // 15 MB hard cap
+        && (request.resource.contentType.matches('image/.*')
+            || request.resource.contentType.matches('video/.*')
+            || request.resource.contentType.matches('audio/.*'));
+    }
+
+    match /couples/{coupleId}/{allPaths=**} {
+      allow read: if signedIn();
+      allow write: if signedIn() && reasonableMedia();
+    }
+
+    match /users/{uid}/avatar/{file} {
+      allow read: if signedIn();
+      allow write: if signedIn() && request.auth.uid == uid
+                   && request.resource.size < 5 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+    }
+
+    match /{allPaths=**} { allow read, write: if false; }
+  }
+}

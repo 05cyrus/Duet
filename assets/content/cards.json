@@ -1,0 +1,23 @@
+[
+  { "id": "c1", "category": "cute", "type": "truth", "text": "What was the exact moment you knew you liked me?", "enabled": true },
+  { "id": "c2", "category": "cute", "type": "dare", "text": "Send me the most flattering selfie you can take in 30 seconds.", "enabled": true },
+  { "id": "c3", "category": "cute", "type": "romantic_challenge", "text": "Describe me using only three words, then explain each one.", "enabled": true },
+  { "id": "c4", "category": "cute", "type": "truth", "text": "What's a tiny thing I do that you secretly love?", "enabled": true },
+  { "id": "c5", "category": "cute", "type": "kiss", "text": "Blow me a kiss and tell me where you'd want to be right now together.", "enabled": true },
+
+  { "id": "r1", "category": "romantic", "type": "romantic_challenge", "text": "Plan our dream date night in three messages.", "enabled": true },
+  { "id": "r2", "category": "romantic", "type": "truth", "text": "What's your favorite memory of us so far?", "enabled": true },
+  { "id": "r3", "category": "romantic", "type": "dare", "text": "Record a 15-second voice note saying what you love about me.", "enabled": true },
+  { "id": "r4", "category": "romantic", "type": "kiss", "text": "Save your next kiss for me and describe how you imagine it.", "enabled": true },
+  { "id": "r5", "category": "romantic", "type": "truth", "text": "Where do you picture us in five years?", "enabled": true },
+
+  { "id": "s1", "category": "spicy", "type": "truth", "text": "What's something you find irresistibly attractive about me?", "enabled": true },
+  { "id": "s2", "category": "spicy", "type": "dare", "text": "Send a flirty text as if we just met for the first time.", "enabled": true },
+  { "id": "s3", "category": "spicy", "type": "fantasy", "text": "Describe your idea of a perfect romantic getaway for just us two.", "enabled": true },
+  { "id": "s4", "category": "spicy", "type": "truth", "text": "What's a compliment you've wanted to give me but were too shy to say?", "enabled": true },
+
+  { "id": "w1", "category": "wild", "type": "dare", "text": "Plan a surprise for me and don't tell me what it is yet.", "enabled": true },
+  { "id": "w2", "category": "wild", "type": "fantasy", "text": "Share a bucket-list adventure you'd want us to do together someday.", "enabled": true },
+  { "id": "w3", "category": "wild", "type": "truth", "text": "What's the boldest thing you'd do to surprise me?", "enabled": true },
+  { "id": "w4", "category": "wild", "type": "dare", "text": "Pick our next spontaneous trip destination — right now, no overthinking.", "enabled": true }
+]

@@ -1,0 +1,31 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "posts",
+      "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "createdAt", "order": "DESCENDING" }]
+    },
+    {
+      "collectionGroup": "moods",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "timeline",
+      "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "date", "order": "DESCENDING" }]
+    },
+    {
+      "collectionGroup": "fantasies",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tag", "order": "ASCENDING" },
+        { "fieldPath": "ownerId", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}
