@@ -49,7 +49,10 @@ service cloud.firestore {
                     && request.resource.data.memberIds.size() == 2
                     && resource.data.memberIds[0] in request.resource.data.memberIds
                     && request.auth.uid in request.resource.data.memberIds;
-      allow delete: if false;
+      // A member may dissolve the couple (the "remove partner" wipe). The
+      // initiator deletes subcollections first (while still a member), then the
+      // couple doc last.
+      allow delete: if isMember(coupleId);
 
       // ---- All couple subcollections: members only ----
       // NOTE on capsules (F3): a recursive wildcard can't also enforce

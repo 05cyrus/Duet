@@ -21,6 +21,9 @@ service firebase.storage {
     match /couples/{coupleId}/{allPaths=**} {
       allow read: if signedIn();
       allow write: if signedIn() && reasonableMedia();
+      // Allow deletes (the "remove partner" wipe) — reasonableMedia() checks
+      // request.resource which is null on delete, so delete needs its own rule.
+      allow delete: if signedIn();
     }
 
     match /users/{uid}/avatar/{file} {

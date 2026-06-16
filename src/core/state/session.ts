@@ -42,6 +42,9 @@ export function useCoupleId(): string | null {
  */
 export function usePartnerId(): string | null {
   return useSession((s) => {
+    // Guard: without our own uid, "the member that isn't me" could wrongly
+    // resolve to ourselves. Fall back to the stored partnerId until uid loads.
+    if (!s.uid) return s.profile?.partnerId ?? null;
     const fromCouple = (s.couple?.memberIds ?? []).find((id) => id !== s.uid);
     return fromCouple ?? s.profile?.partnerId ?? null;
   });

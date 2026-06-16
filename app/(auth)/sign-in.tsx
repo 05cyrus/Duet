@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, TextInput, StyleSheet, Alert } from 'react-native';
+import { View, TextInput, StyleSheet } from 'react-native';
 import { Link } from 'expo-router';
 import { Screen, Text, Button, Card, GradientBackground } from '@/core/ui';
 import { useTheme } from '@/core/theme';
@@ -11,14 +11,16 @@ export default function SignIn() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const google = useGoogleAuth((msg) => Alert.alert('Google sign-in failed', msg));
+  const [error, setError] = useState<string | null>(null);
+  const google = useGoogleAuth((msg) => setError(msg));
 
   const onSignIn = async () => {
     setLoading(true);
+    setError(null);
     try {
       await authService.signInEmail(email.trim(), password);
     } catch (e) {
-      Alert.alert('Sign in failed', (e as Error).message);
+      setError((e as Error).message ?? 'Unknown error');
     } finally {
       setLoading(false);
     }
@@ -53,6 +55,11 @@ export default function SignIn() {
             onChangeText={setPassword}
             style={[styles.input, { color: theme.colors.text, borderColor: theme.colors.border }]}
           />
+          {error ? (
+            <Text variant="caption" color="danger" center style={{ marginVertical: theme.spacing.sm }}>
+              {error}
+            </Text>
+          ) : null}
           <Button title="Sign In" onPress={onSignIn} loading={loading} variant="gradient" />
           <View style={{ height: theme.spacing.sm }} />
           <Button
@@ -63,9 +70,6 @@ export default function SignIn() {
             variant="secondary"
           />
           <View style={{ height: theme.spacing.sm }} />
-          <Link href="/(auth)/otp" asChild>
-            <Button title="Use email code instead" onPress={() => {}} variant="ghost" />
-          </Link>
           <Link href="/(auth)/sign-up" asChild>
             <Button title="Create an account" onPress={() => {}} variant="secondary" />
           </Link>

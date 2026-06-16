@@ -1,18 +1,56 @@
-import React from 'react';
-import { View, Pressable, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { View, Pressable, StyleSheet, Alert } from 'react-native';
 import { Screen, Text, Card, Avatar, Button } from '@/core/ui';
 import { useTheme, useThemePref } from '@/core/theme';
-import { useSession } from '@/core/state/session';
+import { useSession, usePartnerId } from '@/core/state/session';
 import { authService } from '@/features/auth/application/authService';
+import { coupleRepository } from '@/features/auth/data/coupleRepository';
 import { InvitePartnerCard } from '@/features/auth/ui/InvitePartnerCard';
 
 export default function Profile() {
   const theme = useTheme();
-  const { profile, couple } = useSession();
+  const { profile, couple, uid } = useSession();
   const { mode, setMode } = useThemePref();
+  const [unlinking, setUnlinking] = useState(false);
 
-  const partnerId = profile?.partnerId ?? '';
+  const partnerId = usePartnerId() ?? '';
   const partnerName = couple?.members?.[partnerId]?.displayName ?? 'Partner';
+
+  const confirmRemovePartner = () => {
+    if (!couple || !uid) return;
+    Alert.alert(
+      'Remove partner?',
+      'This permanently deletes ALL of your shared data — moods, notes, photos, ' +
+        'games, timeline, everything — for BOTH of you. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove & delete',
+          style: 'destructive',
+          onPress: () =>
+            // Second confirmation — this is irreversible.
+            Alert.alert('Are you absolutely sure?', 'Last chance — everything will be erased.', [
+              { text: 'Keep my data', style: 'cancel' },
+              {
+                text: 'Yes, delete everything',
+                style: 'destructive',
+                onPress: async () => {
+                  setUnlinking(true);
+                  try {
+                    await coupleRepository.unlinkAndWipe(couple.id, uid);
+                    // The bootstrap listener routes us back to link-partner.
+                  } catch (e) {
+                    Alert.alert('Could not remove', (e as Error).message);
+                  } finally {
+                    setUnlinking(false);
+                  }
+                },
+              },
+            ]),
+        },
+      ],
+    );
+  };
 
   return (
     <Screen scroll>
@@ -84,6 +122,24 @@ export default function Profile() {
           Home · Office · Gym · Custom — significant-change updates to save battery.
         </Text>
       </Card>
+
+      {/* Danger zone — remove partner & wipe all shared data */}
+      {couple ? (
+        <Card style={{ marginBottom: theme.spacing.lg, borderColor: theme.colors.danger, borderWidth: 1 }}>
+          <Text variant="heading" color="danger">
+            Danger zone
+          </Text>
+          <Text variant="caption" color="textMuted" style={{ marginTop: 4, marginBottom: theme.spacing.md }}>
+            Removing your partner deletes all shared data for both of you. This can’t be undone.
+          </Text>
+          <Button
+            title={unlinking ? 'Removing…' : 'Remove partner & delete data'}
+            onPress={confirmRemovePartner}
+            loading={unlinking}
+            variant="secondary"
+          />
+        </Card>
+      ) : null}
 
       <Button title="Sign out" onPress={() => authService.signOut()} variant="secondary" />
     </Screen>

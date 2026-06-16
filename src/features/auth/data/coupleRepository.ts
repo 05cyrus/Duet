@@ -1,14 +1,50 @@
 import {
   doc,
   getDoc,
+  getDocs,
+  collection,
   setDoc,
   updateDoc,
+  deleteDoc,
+  writeBatch,
   runTransaction,
   serverTimestamp,
 } from 'firebase/firestore';
-import { ref, set as rtdbSet } from 'firebase/database';
+import { ref, set as rtdbSet, remove as rtdbRemove } from 'firebase/database';
 import { db, rtdb } from '@/core/firebase/client';
 import type { Couple, CoupleInvite, UserProfile } from '@/types/models';
+
+/** Every couple-scoped subcollection (see docs/DATABASE_SCHEMA.md). */
+const COUPLE_SUBCOLLECTIONS = [
+  'moods', 'geofences', 'capsules', 'posts', 'snaps', 'bereal', 'wheelSpins',
+  'fantasies', 'mediations', 'letters', 'meta', 'radars', 'loveLanguages',
+  'compatibility', 'timeline', 'taps', 'dreamPins', 'dreamCollections', 'games',
+];
+
+/** Delete every doc in a collection path, batched (max 450 ops/commit). */
+async function wipeCollection(path: string): Promise<void> {
+  const snap = await getDocs(collection(db, path));
+  if (snap.empty) return;
+  let batch = writeBatch(db);
+  let n = 0;
+  for (const d of snap.docs) {
+    batch.delete(d.ref);
+    if (++n % 450 === 0) {
+      await batch.commit();
+      batch = writeBatch(db);
+    }
+  }
+  if (n % 450 !== 0) await batch.commit();
+}
+
+/** Remove this user's own RTDB nodes for a couple (rules forbid the partner's). */
+async function wipeOwnRtdb(coupleId: string, uid: string): Promise<void> {
+  await Promise.allSettled(
+    ['location', 'mood', 'heartbeat', 'missingYou'].map((k) =>
+      rtdbRemove(ref(rtdb, `${k}/${coupleId}/${uid}`)),
+    ).concat(rtdbRemove(ref(rtdb, `coupleMembers/${coupleId}/${uid}`))),
+  );
+}
 
 /**
  * Couple linking + invite system. This is the trickiest consistency operation
@@ -120,6 +156,36 @@ export const coupleRepository = {
 
   async setAnniversary(coupleId: string, anniversary: string): Promise<void> {
     await updateDoc(doc(db, 'couples', coupleId), { anniversary });
+  },
+
+  /**
+   * Remove the partner and DELETE all shared data (irreversible). Initiator side:
+   * wipes every couple subcollection (incl. nested post comments), resets our
+   * OWN user doc, then deletes the couple doc LAST (so isMember stays true during
+   * the wipe), and clears our own RTDB nodes. The partner's app self-cleans via
+   * the bootstrap when it detects the couple is gone — rules only let each user
+   * reset their own user doc + RTDB, so cleanup is cooperative.
+   */
+  async unlinkAndWipe(coupleId: string, uid: string): Promise<void> {
+    // Nested comments first (posts/{id}/comments).
+    const posts = await getDocs(collection(db, `couples/${coupleId}/posts`));
+    for (const p of posts.docs) {
+      await wipeCollection(`couples/${coupleId}/posts/${p.id}/comments`).catch(() => {});
+    }
+    // Every top-level subcollection.
+    for (const sub of COUPLE_SUBCOLLECTIONS) {
+      await wipeCollection(`couples/${coupleId}/${sub}`).catch(() => {});
+    }
+    // Reset our own user doc, then delete the couple doc LAST.
+    await updateDoc(doc(db, 'users', uid), { coupleId: null, partnerId: null });
+    await deleteDoc(doc(db, 'couples', coupleId));
+    await wipeOwnRtdb(coupleId, uid);
+  },
+
+  /** Partner-side cleanup once the other person deleted the couple. */
+  async leaveDissolvedCouple(coupleId: string, uid: string): Promise<void> {
+    await updateDoc(doc(db, 'users', uid), { coupleId: null, partnerId: null }).catch(() => {});
+    await wipeOwnRtdb(coupleId, uid);
   },
 };
 

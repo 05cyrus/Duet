@@ -3,7 +3,7 @@ import React from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryClientProvider } from '@tanstack/react-query';
-import { Stack, useRouter, useSegments } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { useEffect } from 'react';
 import { queryClient } from '@/core/query/client';
 import { ThemeProvider } from '@/core/theme';
@@ -19,16 +19,19 @@ import { useAuthBootstrap } from '@/features/auth/application/useAuthBootstrap';
 function AuthGate() {
   useAuthBootstrap();
   const status = useSession((s) => s.status);
-  const segments = useSegments();
   const router = useRouter();
 
+  // Navigate purely by auth status. We intentionally do NOT depend on
+  // useSegments() — it can transiently return [] (seg0 undefined), which made
+  // the old `inAuth` check fail and stranded signed-in users on the sign-in
+  // screen. Keying the effect on `status` alone fires exactly once per status
+  // change, so it won't yank the user around while they browse within a group.
   useEffect(() => {
     if (status === 'loading') return;
-    const inAuth = segments[0] === '(auth)';
-    if (status === 'signedOut' && !inAuth) router.replace('/(auth)/sign-in');
+    if (status === 'signedOut') router.replace('/(auth)/sign-in');
     else if (status === 'needsPartner') router.replace('/(auth)/link-partner');
-    else if (status === 'ready' && inAuth) router.replace('/(tabs)');
-  }, [status, segments, router]);
+    else if (status === 'ready') router.replace('/(tabs)');
+  }, [status, router]);
 
   return (
     <Stack screenOptions={{ headerShown: false }}>

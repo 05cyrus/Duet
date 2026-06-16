@@ -1,4 +1,3 @@
-import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
@@ -9,54 +8,74 @@ import type { UserProfile } from '@/types/models';
 /**
  * Push notifications via EXPO's free push service.
  *
- * Why Expo push (not raw FCM)? For 2 users it needs no server: the app fetches
- * the partner's Expo push token (stored on their user doc) and POSTs directly
- * to Expo's public push endpoint — ₹0, no Cloud Functions.
+ * Why Expo push (not raw FCM)? For 2 users it needs no server: the app stores
+ * each device's Expo token on the user doc and POSTs directly to Expo's public
+ * push endpoint — ₹0, no Cloud Functions.
  *
- * IMPORTANT: remote push requires a DEVELOPMENT BUILD (Expo Go no longer
- * delivers remote push on Android). Android also needs an FCM credential on the
- * Expo project (free, via `eas credentials`); iOS needs an APNs key (Apple
- * Developer account). See docs/PUSH_SETUP.md.
+ * Expo Go (SDK 53+) removed remote push, and even *importing* expo-notifications
+ * there throws. So we LAZILY require it (never in Expo Go) — the module is only
+ * loaded on a real/dev build. Delivery additionally needs an FCM credential
+ * (Android, free) / APNs key (iOS, Apple account). See docs/PUSH_SETUP.md.
  */
+const isExpoGo = Constants.executionEnvironment === 'storeClient' || Constants.appOwnership === 'expo';
+export const pushSupported = !isExpoGo;
 
-// How notifications appear while the app is foregrounded.
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
+// Lazy handle to expo-notifications — never required inside Expo Go.
+type NotificationsModule = typeof import('expo-notifications');
+let _notif: NotificationsModule | null = null;
+function getNotifications(): NotificationsModule | null {
+  if (isExpoGo) return null;
+  if (!_notif) {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    _notif = require('expo-notifications') as NotificationsModule;
+  }
+  return _notif;
+}
 
-/** Ask permission + return this device's Expo push token (null if unavailable). */
+let handlerReady = false;
+function ensureHandler(N: NotificationsModule) {
+  if (handlerReady) return;
+  handlerReady = true;
+  N.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowBanner: true,
+      shouldShowList: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+    }),
+  });
+}
+
+/**
+ * Ask permission + return this device's Expo push token (null if unavailable).
+ * Fully best-effort: ANY failure (Expo Go, missing credentials, denied
+ * permission, simulator) resolves to null without throwing or logging.
+ */
 export async function registerForPushToken(): Promise<string | null> {
-  if (!Device.isDevice) return null; // simulators can't get a real token
-
-  if (Platform.OS === 'android') {
-    await Notifications.setNotificationChannelAsync('default', {
-      name: 'Duet',
-      importance: Notifications.AndroidImportance.HIGH,
-      vibrationPattern: [0, 250, 250, 250],
-    });
-  }
-
-  const existing = await Notifications.getPermissionsAsync();
-  let granted = existing.granted;
-  if (!granted) {
-    granted = (await Notifications.requestPermissionsAsync()).granted;
-  }
-  if (!granted) return null;
-
-  const projectId =
-    (Constants.expoConfig?.extra as { eas?: { projectId?: string } })?.eas?.projectId;
+  const N = getNotifications();
+  if (!N || !Device.isDevice) return null;
   try {
-    const { data } = await Notifications.getExpoPushTokenAsync(
-      projectId ? { projectId } : undefined,
-    );
+    ensureHandler(N);
+
+    if (Platform.OS === 'android') {
+      await N.setNotificationChannelAsync('default', {
+        name: 'Duet',
+        importance: N.AndroidImportance.HIGH,
+        vibrationPattern: [0, 250, 250, 250],
+      });
+    }
+
+    const existing = await N.getPermissionsAsync();
+    let granted = existing.granted;
+    if (!granted) granted = (await N.requestPermissionsAsync()).granted;
+    if (!granted) return null;
+
+    const projectId =
+      (Constants.expoConfig?.extra as { eas?: { projectId?: string } })?.eas?.projectId;
+    const { data } = await N.getExpoPushTokenAsync(projectId ? { projectId } : undefined);
     return data;
   } catch {
-    return null; // e.g. Expo Go on Android, or missing push credentials
+    return null; // no push credentials yet — silently skip
   }
 }
 

@@ -14,23 +14,28 @@ export const MOODS: { key: MoodKey; emoji: string; label: string }[] = [
 /** Live mood for both me and my partner + a one-tap setter. */
 export function useMood() {
   const { couple, uid } = useSession();
-  const partnerId = usePartnerId();
   const coupleId = couple?.id ?? null;
+  const memberIds = couple?.memberIds ?? [];
+  const membersKey = memberIds.join(','); // stable dep
 
-  const [mine, setMine] = useState<CurrentMood | null>(null);
-  const [partner, setPartner] = useState<CurrentMood | null>(null);
+  // Subscribe to EVERY member's mood node, keyed by uid. This removes any
+  // dependence on correctly computing partnerId — whoever isn't me is "partner".
+  const [moods, setMoods] = useState<Record<string, CurrentMood | null>>({});
 
   useEffect(() => {
-    if (!coupleId || !uid) return;
-    const u1 = moodRepository.subscribeCurrent(coupleId, uid, setMine);
-    const u2 = partnerId
-      ? moodRepository.subscribeCurrent(coupleId, partnerId, setPartner)
-      : () => {};
-    return () => {
-      u1();
-      u2();
-    };
-  }, [coupleId, uid, partnerId]);
+    if (!coupleId || memberIds.length === 0) return;
+    const unsubs = memberIds.map((mid) =>
+      moodRepository.subscribeCurrent(coupleId, mid, (m) =>
+        setMoods((prev) => ({ ...prev, [mid]: m })),
+      ),
+    );
+    return () => unsubs.forEach((u) => u());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coupleId, membersKey]);
+
+  const mine = uid ? (moods[uid] ?? null) : null;
+  const partnerKey = memberIds.find((id) => id !== uid);
+  const partner = partnerKey ? (moods[partnerKey] ?? null) : null;
 
   const setMood = useCallback(
     (mood: MoodKey, note: string | null = null) => {
