@@ -19,15 +19,26 @@ export function useTaps(kind: TapKind) {
   const partnerId = usePartnerId();
   const coupleId = couple?.id ?? null;
   const [state, setState] = useState<TapState | null>(null);
+  const [partnerState, setPartnerState] = useState<TapState | null>(null);
 
   // Partner's push tokens, loaded once and reused — avoids a Firestore read
   // on every tap (heartbeats can be spammed).
   const partnerTokens = useRef<string[]>([]);
 
+  // My own counter.
   useEffect(() => {
     if (!coupleId || !uid) return;
     return tapRepository.subscribe(kind, coupleId, uid, setState);
   }, [kind, coupleId, uid]);
+
+  // Partner's counter (how many times they've tapped me) — live.
+  useEffect(() => {
+    if (!coupleId || !partnerId) {
+      setPartnerState(null);
+      return;
+    }
+    return tapRepository.subscribe(kind, coupleId, partnerId, setPartnerState);
+  }, [kind, coupleId, partnerId]);
 
   useEffect(() => {
     if (!partnerId) {
@@ -51,5 +62,5 @@ export function useTaps(kind: TapKind) {
     return tapRepository.tap(kind, coupleId, uid);
   }, [kind, coupleId, uid, profile?.displayName]);
 
-  return { state, tap };
+  return { state, partnerState, tap };
 }

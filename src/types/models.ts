@@ -105,6 +105,7 @@ export interface EtaEstimate {
 
 export type MoodKey =
   | 'happy'
+  | 'sad'
   | 'sleepy'
   | 'angry'
   | 'need_attention'
