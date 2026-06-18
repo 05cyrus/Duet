@@ -12,6 +12,7 @@ export default function Love() {
       <Text variant="display" style={{ marginBottom: theme.spacing.lg }}>
         Love 💞
       </Text>
+      <FeatureTile emoji="💬" title="Chat" subtitle="Your private space to talk" badge="Free" onPress={() => router.push('/chat')} />
       <FeatureTile emoji="💌" title="Love Note Capsules" subtitle="Messages that unlock later" badge="Free" />
       <FeatureTile emoji="🔖" title="Shared Dream Board" subtitle="Pin your future together" badge="Free" />
       <FeatureTile emoji="🧭" title="Fantasy Bucket List" subtitle="Reveals only on a match" badge="Free" />

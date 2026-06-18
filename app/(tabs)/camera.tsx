@@ -20,7 +20,6 @@ export default function Camera() {
         actionLabel="Open camera"
       />
       <FeatureTile emoji="🤳" title="Daily BeReal for Two" subtitle="Random daily prompt · 2-min timer · streaks" badge="Free" />
-      <FeatureTile emoji="🔥" title="Instant Snaps" subtitle="Expiring photos · view receipts · reactions" badge="Free" />
     </Screen>
   );
 }

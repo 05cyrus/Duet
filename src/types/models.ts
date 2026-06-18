@@ -183,6 +183,45 @@ export interface InstantSnap {
   createdAt: Millis;
 }
 
+/* ─────────────────────────────── Chat ─────────────────────────────── */
+
+export type ChatMessageKind = 'text' | 'snap';
+
+/**
+ * An "instant snap" sent inside chat: an expiring photo with a view receipt
+ * and an optional reaction. Ephemerality is enforced on the recipient side —
+ * once `viewedAt` is set the snap can't be reopened, and the recipient
+ * best-effort deletes the Storage object after viewing (Storage rules allow a
+ * signed-in member to delete under their couple path).
+ */
+export interface ChatSnap {
+  media: MediaRef;
+  /** Seconds the snap stays open after the recipient first views it. */
+  viewSeconds: number;
+  /** When the recipient first opened it (view receipt). Null until opened. */
+  viewedAt: Millis | null;
+  /** Recipient's emoji reaction, if any. */
+  reaction: string | null;
+}
+
+/**
+ * A single message in the couple's private chat space. Stored under
+ * `couples/{coupleId}/messages`. Kept deliberately small: free chatting for
+ * two people is a handful of tiny writes and a single live listener, so it
+ * stays comfortably inside the Firebase Spark free tier.
+ */
+export interface ChatMessage {
+  id: ID;
+  coupleId: ID;
+  senderId: ID;
+  kind: ChatMessageKind;
+  /** Body for `text` messages; optional caption for `snap` messages. */
+  text: string;
+  /** Present only when `kind === 'snap'`. */
+  snap: ChatSnap | null;
+  createdAt: Millis;
+}
+
 /* ───────────────────────────── F6 BeReal ──────────────────────────── */
 
 export interface BeRealRound {
