@@ -14,9 +14,11 @@ import { Stack } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
+import { isSameDay } from 'date-fns';
 import { Text, EmptyState } from '@/core/ui';
 import { useTheme } from '@/core/theme';
 import { useChat } from '@/features/chat/application/useChat';
+import { DateSeparator } from '@/features/chat/ui/DateSeparator';
 import { MessageBubble } from '@/features/chat/ui/MessageBubble';
 import { SnapBubble } from '@/features/chat/ui/SnapBubble';
 import { SnapViewer } from '@/features/chat/ui/SnapViewer';
@@ -117,17 +119,31 @@ export default function ChatScreen() {
           data={messages}
           inverted={messages.length > 0}
           keyExtractor={(m) => m.id}
-          renderItem={({ item }) =>
-            item.kind === 'snap' ? (
-              <SnapBubble
-                message={item}
-                mine={item.senderId === uid}
-                onOpen={() => onOpenSnap(item)}
-              />
-            ) : (
-              <MessageBubble message={item} mine={item.senderId === uid} />
-            )
-          }
+          renderItem={({ item, index }) => {
+            // List is inverted & newest-first, so the chronologically older
+            // neighbour is the NEXT index. Show the day label above the first
+            // message of each day (i.e. when the older neighbour is a different
+            // day, or this is the oldest message).
+            const ts = item.createdAt ?? Date.now();
+            const older = messages[index + 1];
+            const showDate = !older || !isSameDay(ts, older.createdAt ?? Date.now());
+            const bubble =
+              item.kind === 'snap' ? (
+                <SnapBubble
+                  message={item}
+                  mine={item.senderId === uid}
+                  onOpen={() => onOpenSnap(item)}
+                />
+              ) : (
+                <MessageBubble message={item} mine={item.senderId === uid} />
+              );
+            return (
+              <>
+                {showDate ? <DateSeparator millis={ts} /> : null}
+                {bubble}
+              </>
+            );
+          }}
           contentContainerStyle={{ padding: theme.spacing.lg, flexGrow: 1 }}
           ListEmptyComponent={
             loading ? null : (
