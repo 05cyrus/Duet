@@ -1,10 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Pressable, ScrollView, StyleSheet } from 'react-native';
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import Animated, { FadeIn, FadeInDown, ZoomIn } from 'react-native-reanimated';
 import { Screen, Text, Card, Button } from '@/core/ui';
 import { useTheme } from '@/core/theme';
 import { useCards, CATEGORIES } from '@/features/cards/application/useCards';
+import { useChat } from '@/features/chat/application/useChat';
+import { useSession } from '@/core/state/session';
 import type { CardCategory } from '@/types/models';
 
 const TYPE_LABEL: Record<string, string> = {
@@ -17,7 +19,25 @@ const TYPE_LABEL: Record<string, string> = {
 
 export default function CardsScreen() {
   const theme = useTheme();
-  const { category, setCategory, current, daily, next, shuffle, favorites, deckSize } = useCards();
+  const router = useRouter();
+  const { category, setCategory, current, daily, shuffle, favorites, deckSize } = useCards();
+  const { send } = useChat();
+  const { couple } = useSession();
+
+  // Send the current card's question to the partner in chat, then jump to the
+  // conversation so they can see it land. `sending` guards against double-taps.
+  const [sending, setSending] = useState(false);
+  const onSend = async () => {
+    if (!current || sending) return;
+    setSending(true);
+    try {
+      const label = TYPE_LABEL[current.type] ?? '💞 Challenge';
+      await send(`${label}: ${current.text}`);
+      router.push('/chat');
+    } finally {
+      setSending(false);
+    }
+  };
 
   return (
     <Screen scroll>
@@ -86,7 +106,12 @@ export default function CardsScreen() {
       <View style={{ height: theme.spacing.lg }} />
       <Button title="🔀 Shuffle" onPress={shuffle} variant="gradient" />
       <View style={{ height: theme.spacing.sm }} />
-      <Button title="Next card →" onPress={next} variant="secondary" />
+      <Button
+        title={sending ? 'Sending…' : '💬 Send to chat'}
+        onPress={onSend}
+        variant="secondary"
+        disabled={!current || sending}
+      />
 
       {favorites.ids.length ? (
         <Animated.View entering={FadeIn} style={{ marginTop: theme.spacing.xl }}>

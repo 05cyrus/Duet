@@ -16,7 +16,7 @@ import type { Couple, CoupleInvite, UserProfile } from '@/types/models';
 
 /** Every couple-scoped subcollection (see docs/DATABASE_SCHEMA.md). */
 const COUPLE_SUBCOLLECTIONS = [
-  'moods', 'geofences', 'capsules', 'posts', 'snaps', 'bereal', 'wheelSpins',
+  'moods', 'geofences', 'capsules', 'posts', 'snaps', 'wheelSpins',
   'fantasies', 'mediations', 'letters', 'meta', 'radars', 'loveLanguages',
   'compatibility', 'timeline', 'taps', 'dreamPins', 'dreamCollections', 'games',
 ];

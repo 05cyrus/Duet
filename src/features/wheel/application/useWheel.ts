@@ -2,6 +2,8 @@ import { useState, useCallback } from 'react';
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useSession } from '@/core/state/session';
+import { ChatRepository } from '@/features/chat/data/chatRepository';
 import type { WheelReward } from '@/types/models';
 
 /**
@@ -27,6 +29,10 @@ export interface SpinRecord {
 
 interface HistoryState {
   spins: SpinRecord[];
+  /** When the user last spun. Drives the one-spin-a-day gate and, unlike the
+   *  visible log, is intentionally NOT reset by `clear()` so the limit can't be
+   *  bypassed by clearing history. */
+  lastSpinAt: number | null;
   add: (r: SpinRecord) => void;
   clear: () => void;
 }
@@ -34,12 +40,20 @@ export const useWheelHistory = create<HistoryState>()(
   persist(
     (set) => ({
       spins: [],
-      add: (r) => set((s) => ({ spins: [r, ...s.spins].slice(0, 50) })),
+      lastSpinAt: null,
+      add: (r) => set((s) => ({ spins: [r, ...s.spins].slice(0, 50), lastSpinAt: r.at })),
       clear: () => set({ spins: [] }),
     }),
     { name: 'duet-wheel-history', storage: createJSONStorage(() => AsyncStorage) },
   ),
 );
+
+/** Local midnight (ms) for an instant — used to compare calendar days. */
+function startOfDay(ms: number): number {
+  const d = new Date(ms);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
 
 /** Weighted random pick → returns the landing index. */
 function pickIndex(): number {
@@ -56,13 +70,21 @@ export function useWheel() {
   const [spinning, setSpinning] = useState(false);
   const [result, setResult] = useState<WheelReward | null>(null);
   const history = useWheelHistory();
+  const { couple, uid } = useSession();
+  const coupleId = couple?.id ?? null;
 
-  /** Returns the chosen index so the UI can animate to it. */
+  // One spin per calendar day. Available again once the day rolls over.
+  const canSpinToday =
+    history.lastSpinAt == null || startOfDay(history.lastSpinAt) < startOfDay(Date.now());
+
+  /** Returns the chosen index so the UI can animate to it, or null if the
+   *  daily spin is already used (the UI also disables the button). */
   const beginSpin = useCallback(() => {
+    if (!canSpinToday || spinning) return null;
     setSpinning(true);
     setResult(null);
     return pickIndex();
-  }, []);
+  }, [canSpinToday, spinning]);
 
   const finishSpin = useCallback(
     (index: number) => {
@@ -70,9 +92,18 @@ export function useWheel() {
       setResult(reward);
       setSpinning(false);
       history.add({ rewardId: reward.id, label: reward.label, emoji: reward.emoji, at: Date.now() });
+
+      // Announce the result to the partner in chat (fire-and-forget; a failed
+      // send must not block the UI). Direct repo call avoids opening a second
+      // chat listener on this screen.
+      if (coupleId && uid) {
+        new ChatRepository(coupleId)
+          .send(uid, `🎡 The wheel landed on: ${reward.emoji} ${reward.label}`)
+          .catch(() => {});
+      }
     },
-    [history],
+    [history, coupleId, uid],
   );
 
-  return { spinning, result, beginSpin, finishSpin, history };
+  return { spinning, result, canSpinToday, beginSpin, finishSpin, history };
 }

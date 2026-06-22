@@ -17,7 +17,7 @@ export default function Love() {
       <FeatureTile emoji="🔖" title="Shared Dream Board" subtitle="Pin your future together" badge="Free" />
       <FeatureTile emoji="🧭" title="Fantasy Bucket List" subtitle="Reveals only on a match" badge="Free" />
       <FeatureTile emoji="🕰️" title="Relationship Timeline" subtitle="Your story, in photos" badge="Free" />
-      <FeatureTile emoji="😊" title="Mood History" subtitle="See your moods over time" badge="Free" />
+      <FeatureTile emoji="😊" title="Mood History" subtitle="See your moods over time" badge="Free" onPress={() => router.push('/mood-history')} />
       <FeatureTile emoji="💭" title="Missing You Meter" subtitle="Tap when you miss them" badge="Free" onPress={() => router.push('/missing-you')} />
       <FeatureTile emoji="✉️" title="AI Love Letter" subtitle="Generated from your memories" badge="AI · Free tier" />
     </Screen>

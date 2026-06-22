@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Animated,
@@ -10,33 +10,46 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { Stack } from 'expo-router';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { StatusBar } from 'expo-status-bar';
-import * as ImagePicker from 'expo-image-picker';
+import { SnapCamera } from '@/features/chat/ui/SnapCamera';
 import { isSameDay } from 'date-fns';
 import { Text, EmptyState } from '@/core/ui';
 import { useTheme } from '@/core/theme';
 import { useChat } from '@/features/chat/application/useChat';
 import { DateSeparator } from '@/features/chat/ui/DateSeparator';
 import { MessageBubble } from '@/features/chat/ui/MessageBubble';
+import { ReplyQuote } from '@/features/chat/ui/ReplyQuote';
 import { SnapBubble } from '@/features/chat/ui/SnapBubble';
 import { SnapViewer } from '@/features/chat/ui/SnapViewer';
-import type { ChatMessage } from '@/types/models';
+import { SwipeToReply } from '@/features/chat/ui/SwipeToReply';
+import type { ChatMessage, ReplyPreview } from '@/types/models';
 
 // iOS reports a keyboard height that already includes the bottom safe-area inset,
 // so it needs no extra lift. Android edge-to-edge under-reports it, so add a bit.
 const KB_EXTRA_LIFT = Platform.OS === 'android' ? 40 : 0;
 
+/** Snapshot a message into the lightweight preview stored on a reply. */
+function toReplyPreview(m: ChatMessage): ReplyPreview {
+  return { id: m.id, senderId: m.senderId, kind: m.kind, text: m.kind === 'snap' ? '' : m.text };
+}
+
 /** Free chatting space — text + instant snaps, all private to the couple. */
 export default function ChatScreen() {
   const theme = useTheme();
-  const insets = useSafeAreaInsets();
+  // The chat lives inside the tab navigator, so the tab bar already reserves the
+  // bottom safe-area space. We offset the keyboard lift by its height so the
+  // input bar rests exactly on top of the keyboard rather than above it.
+  const tabBarHeight = useBottomTabBarHeight();
   const { messages, send, sendSnap, viewSnap, reactSnap, loadSnap, expireSnap, uid, loading } =
     useChat();
   const [draft, setDraft] = useState('');
   const [openSnap, setOpenSnap] = useState<ChatMessage | null>(null);
+  const [replyTarget, setReplyTarget] = useState<ChatMessage | null>(null);
+  const [cameraOpen, setCameraOpen] = useState(false);
   const [keyboardUp, setKeyboardUp] = useState(false);
+  const inputRef = useRef<TextInput>(null);
   // We drive keyboard avoidance ourselves instead of KeyboardAvoidingView, which
   // is unreliable on Android edge-to-edge (over-measures, doesn't reset on hide).
   // `kbLift` is the exact space to reserve below the content so the input bar
@@ -49,7 +62,7 @@ export default function ChatScreen() {
     const show = Keyboard.addListener(showEvt, (e) => {
       setKeyboardUp(true);
       Animated.timing(kbLift, {
-        toValue: e.endCoordinates.height + KB_EXTRA_LIFT,
+        toValue: Math.max(e.endCoordinates.height - tabBarHeight, 0) + KB_EXTRA_LIFT,
         duration: e.duration || 250,
         useNativeDriver: false,
       }).start();
@@ -66,43 +79,52 @@ export default function ChatScreen() {
       show.remove();
       hide.remove();
     };
-  }, [kbLift]);
+  }, [kbLift, tabBarHeight]);
+
+  const onReply = (message: ChatMessage) => {
+    setReplyTarget(message);
+    inputRef.current?.focus();
+  };
 
   const onSend = () => {
     const text = draft;
+    const replyTo = replyTarget ? toReplyPreview(replyTarget) : null;
     setDraft(''); // clear immediately; the live listener echoes the message back
-    send(text);
+    setReplyTarget(null);
+    send(text, replyTo);
   };
 
-  // Capture and send instantly — no preview step.
-  const onCaptureSnap = async () => {
-    const perm = await ImagePicker.requestCameraPermissionsAsync();
-    if (!perm.granted) {
-      Alert.alert('Camera needed', 'Allow camera access to send a snap.');
-      return;
-    }
-    // Compress hard and request base64 directly — the image goes into RTDB, so
-    // smaller is cheaper and faster. quality 0.4 keeps a phone photo well under
-    // the free-tier comfort zone while still looking fine for a quick snap.
-    const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ['images'],
-      quality: 0.4,
-      base64: true,
-    });
-    if (result.canceled) return;
-    const base64 = result.assets[0]?.base64;
-    if (!base64) return;
-    try {
-      await sendSnap(base64);
-    } catch (e) {
-      const err = e as { code?: string; customData?: { serverResponse?: string }; message?: string };
-      const server = err.customData?.serverResponse;
-      console.error('[chat] snap upload failed', err.code, err.message, server);
-      Alert.alert(
-        'Couldn’t send snap',
-        [err.code, err.message, server].filter(Boolean).join('\n\n') || 'Please try again.',
-      );
-    }
+  // Upload + post a captured snap, surfacing any failure.
+  const deliverSnap = useCallback(
+    async (base64: string, replyTo: ReplyPreview | null) => {
+      try {
+        await sendSnap(base64, undefined, replyTo);
+      } catch (e) {
+        const err = e as {
+          code?: string;
+          customData?: { serverResponse?: string };
+          message?: string;
+        };
+        const server = err.customData?.serverResponse;
+        console.error('[chat] snap upload failed', err.code, err.message, server);
+        Alert.alert(
+          'Couldn’t send snap',
+          [err.code, err.message, server].filter(Boolean).join('\n\n') || 'Please try again.',
+        );
+      }
+    },
+    [sendSnap],
+  );
+
+  // Open the in-app camera. Capturing inside our own activity (vs. launching the
+  // system camera) is what stops Android from destroying & reloading the app.
+  const onCaptureSnap = () => setCameraOpen(true);
+
+  const onSnapCaptured = async (base64: string) => {
+    const replyTo = replyTarget ? toReplyPreview(replyTarget) : null;
+    setReplyTarget(null);
+    setCameraOpen(false);
+    await deliverSnap(base64, replyTo);
   };
 
   const onOpenSnap = (message: ChatMessage) => {
@@ -111,8 +133,7 @@ export default function ChatScreen() {
   };
 
   return (
-    <SafeAreaView style={[styles.flex, { backgroundColor: theme.colors.bg }]} edges={['top']}>
-      <Stack.Screen options={{ headerShown: true, title: 'Chat 💬' }} />
+    <SafeAreaView style={[styles.flex, { backgroundColor: theme.colors.bg }]} edges={[]}>
       <StatusBar style={theme.mode === 'dark' ? 'light' : 'dark'} />
       <Animated.View style={[styles.flex, { paddingBottom: kbLift }]}>
         <FlatList
@@ -132,15 +153,16 @@ export default function ChatScreen() {
                 <SnapBubble
                   message={item}
                   mine={item.senderId === uid}
+                  uid={uid}
                   onOpen={() => onOpenSnap(item)}
                 />
               ) : (
-                <MessageBubble message={item} mine={item.senderId === uid} />
+                <MessageBubble message={item} mine={item.senderId === uid} uid={uid} />
               );
             return (
               <>
                 {showDate ? <DateSeparator millis={ts} /> : null}
-                {bubble}
+                <SwipeToReply onReply={() => onReply(item)}>{bubble}</SwipeToReply>
               </>
             );
           }}
@@ -159,13 +181,34 @@ export default function ChatScreen() {
           keyboardShouldPersistTaps="handled"
         />
 
+        {replyTarget ? (
+          <View
+            style={[
+              styles.replyBanner,
+              { backgroundColor: theme.colors.bgElevated, borderTopColor: theme.colors.border },
+            ]}
+          >
+            <View style={styles.flex}>
+              <ReplyQuote
+                preview={toReplyPreview(replyTarget)}
+                fromMe={replyTarget.senderId === uid}
+              />
+            </View>
+            <Pressable onPress={() => setReplyTarget(null)} hitSlop={10} style={{ padding: 6 }}>
+              <Text color="textMuted" style={{ fontSize: 18 }}>
+                ✕
+              </Text>
+            </Pressable>
+          </View>
+        ) : null}
+
         <View
           style={[
             styles.inputBar,
             {
               backgroundColor: theme.colors.bgElevated,
               borderTopColor: theme.colors.border,
-              paddingBottom: keyboardUp ? 8 : insets.bottom + 8,
+              paddingBottom: 8,
             },
           ]}
         >
@@ -180,6 +223,7 @@ export default function ChatScreen() {
           </Pressable>
 
           <TextInput
+            ref={inputRef}
             value={draft}
             onChangeText={setDraft}
             placeholder="Message…"
@@ -211,6 +255,12 @@ export default function ChatScreen() {
         </View>
       </Animated.View>
 
+      <SnapCamera
+        visible={cameraOpen}
+        onClose={() => setCameraOpen(false)}
+        onCapture={onSnapCaptured}
+      />
+
       <SnapViewer
         message={openSnap}
         loadSnap={loadSnap}
@@ -230,6 +280,13 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  replyBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingTop: 8,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   input: {

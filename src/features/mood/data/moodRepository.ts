@@ -1,7 +1,16 @@
 import { ref, set, onValue, serverTimestamp as rtdbNow } from 'firebase/database';
-import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import {
+  addDoc,
+  collection,
+  limit,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
+  Timestamp,
+} from 'firebase/firestore';
 import { rtdb, db } from '@/core/firebase/client';
-import type { MoodKey } from '@/types/models';
+import type { MoodEntry, MoodKey } from '@/types/models';
 
 /**
  * Mood storage strategy (cost-optimized):
@@ -33,5 +42,40 @@ export const moodRepository = {
     const node = ref(rtdb, `mood/${coupleId}/${uid}`);
     const unsub = onValue(node, (snap) => cb((snap.val() as CurrentMood) ?? null));
     return unsub;
+  },
+
+  /**
+   * Live history subscription over BOTH members' mood entries, newest first.
+   * One open listener on `couples/{coupleId}/moods` — cheap and within free
+   * tier. `max` caps how many entries we hold in memory (default 200, plenty
+   * for the history screen's timeline + analytics).
+   */
+  subscribeHistory(
+    coupleId: string,
+    cb: (entries: MoodEntry[]) => void,
+    max = 200,
+  ): () => void {
+    const q = query(
+      collection(db, `couples/${coupleId}/moods`),
+      orderBy('createdAt', 'desc'),
+      limit(max),
+    );
+    return onSnapshot(q, (snap) => {
+      const entries = snap.docs.map((d) => {
+        const data = d.data();
+        const ts = data.createdAt;
+        return {
+          id: d.id,
+          coupleId: data.coupleId,
+          userId: data.userId,
+          mood: data.mood as MoodKey,
+          note: (data.note ?? null) as string | null,
+          // createdAt is a Firestore Timestamp on read; normalize to millis.
+          // It can be null for a beat while the server timestamp resolves.
+          createdAt: ts instanceof Timestamp ? ts.toMillis() : 0,
+        } satisfies MoodEntry;
+      });
+      cb(entries);
+    });
   },
 };
