@@ -54,6 +54,13 @@
       }
     },
 
+    "snaps": {
+      "$coupleId": {
+        ".read": "auth != null && root.child('coupleMembers').child($coupleId).child(auth.uid).exists()",
+        ".write": "auth != null && root.child('coupleMembers').child($coupleId).child(auth.uid).exists()"
+      }
+    },
+
     "typing": {
       "$coupleId": {
         ".read": "auth != null && root.child('coupleMembers').child($coupleId).child(auth.uid).exists()",

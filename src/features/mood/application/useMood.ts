@@ -5,7 +5,7 @@ import type { MoodKey } from '@/types/models';
 
 export const MOODS: { key: MoodKey; emoji: string; label: string }[] = [
   { key: 'happy', emoji: '😊', label: 'Happy' },
-  { key: 'sad', emoji: '😢', label: 'Sad' },
+  { key: 'sad', emoji: '😔', label: 'Sad' },
   { key: 'sleepy', emoji: '😴', label: 'Sleepy' },
   { key: 'angry', emoji: '😠', label: 'Angry' },
   { key: 'need_attention', emoji: '🥺', label: 'Need Attention' },

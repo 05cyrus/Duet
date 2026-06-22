@@ -61,15 +61,15 @@ export function useChat() {
     [repo],
   );
 
-  const resolveUrl = useCallback(
-    (storagePath: string) => repo?.resolveUrl(storagePath) ?? Promise.reject(new Error('no repo')),
+  const loadSnap = useCallback(
+    (snapId: string) => repo?.loadSnapImage(snapId) ?? Promise.resolve(null),
     [repo],
   );
 
   const expireSnap = useCallback(
-    (storagePath: string) => repo?.deleteSnapMedia(storagePath) ?? Promise.resolve(),
+    (snapId: string) => repo?.deleteSnapImage(snapId) ?? Promise.resolve(),
     [repo],
   );
 
-  return { messages, send, sendSnap, viewSnap, reactSnap, resolveUrl, expireSnap, uid, loading };
+  return { messages, send, sendSnap, viewSnap, reactSnap, loadSnap, expireSnap, uid, loading };
 }

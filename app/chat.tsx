@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Alert,
+  Animated,
   FlatList,
-  KeyboardAvoidingView,
+  Keyboard,
   Platform,
   Pressable,
   StyleSheet,
@@ -10,7 +11,7 @@ import {
   View,
 } from 'react-native';
 import { Stack } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
 import { Text, EmptyState } from '@/core/ui';
@@ -21,13 +22,49 @@ import { SnapBubble } from '@/features/chat/ui/SnapBubble';
 import { SnapViewer } from '@/features/chat/ui/SnapViewer';
 import type { ChatMessage } from '@/types/models';
 
+// iOS reports a keyboard height that already includes the bottom safe-area inset,
+// so it needs no extra lift. Android edge-to-edge under-reports it, so add a bit.
+const KB_EXTRA_LIFT = Platform.OS === 'android' ? 40 : 0;
+
 /** Free chatting space — text + instant snaps, all private to the couple. */
 export default function ChatScreen() {
   const theme = useTheme();
-  const { messages, send, sendSnap, viewSnap, reactSnap, resolveUrl, expireSnap, uid, loading } =
+  const insets = useSafeAreaInsets();
+  const { messages, send, sendSnap, viewSnap, reactSnap, loadSnap, expireSnap, uid, loading } =
     useChat();
   const [draft, setDraft] = useState('');
   const [openSnap, setOpenSnap] = useState<ChatMessage | null>(null);
+  const [keyboardUp, setKeyboardUp] = useState(false);
+  // We drive keyboard avoidance ourselves instead of KeyboardAvoidingView, which
+  // is unreliable on Android edge-to-edge (over-measures, doesn't reset on hide).
+  // `kbLift` is the exact space to reserve below the content so the input bar
+  // rests on top of the keyboard, and it always animates back to 0 on hide.
+  const kbLift = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const show = Keyboard.addListener(showEvt, (e) => {
+      setKeyboardUp(true);
+      Animated.timing(kbLift, {
+        toValue: e.endCoordinates.height + KB_EXTRA_LIFT,
+        duration: e.duration || 250,
+        useNativeDriver: false,
+      }).start();
+    });
+    const hide = Keyboard.addListener(hideEvt, (e) => {
+      setKeyboardUp(false);
+      Animated.timing(kbLift, {
+        toValue: 0,
+        duration: e?.duration || 200,
+        useNativeDriver: false,
+      }).start();
+    });
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, [kbLift]);
 
   const onSend = () => {
     const text = draft;
@@ -42,12 +79,19 @@ export default function ChatScreen() {
       Alert.alert('Camera needed', 'Allow camera access to send a snap.');
       return;
     }
-    const result = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.6 });
+    // Compress hard and request base64 directly — the image goes into RTDB, so
+    // smaller is cheaper and faster. quality 0.4 keeps a phone photo well under
+    // the free-tier comfort zone while still looking fine for a quick snap.
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ['images'],
+      quality: 0.4,
+      base64: true,
+    });
     if (result.canceled) return;
-    const uri = result.assets[0]?.uri;
-    if (!uri) return;
+    const base64 = result.assets[0]?.base64;
+    if (!base64) return;
     try {
-      await sendSnap(uri);
+      await sendSnap(base64);
     } catch (e) {
       const err = e as { code?: string; customData?: { serverResponse?: string }; message?: string };
       const server = err.customData?.serverResponse;
@@ -68,11 +112,7 @@ export default function ChatScreen() {
     <SafeAreaView style={[styles.flex, { backgroundColor: theme.colors.bg }]} edges={['top']}>
       <Stack.Screen options={{ headerShown: true, title: 'Chat 💬' }} />
       <StatusBar style={theme.mode === 'dark' ? 'light' : 'dark'} />
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-      >
+      <Animated.View style={[styles.flex, { paddingBottom: kbLift }]}>
         <FlatList
           data={messages}
           inverted={messages.length > 0}
@@ -106,7 +146,11 @@ export default function ChatScreen() {
         <View
           style={[
             styles.inputBar,
-            { backgroundColor: theme.colors.bgElevated, borderTopColor: theme.colors.border },
+            {
+              backgroundColor: theme.colors.bgElevated,
+              borderTopColor: theme.colors.border,
+              paddingBottom: keyboardUp ? 8 : insets.bottom + 8,
+            },
           ]}
         >
           <Pressable
@@ -149,11 +193,11 @@ export default function ChatScreen() {
             <Text style={{ fontSize: 20 }}>➤</Text>
           </Pressable>
         </View>
-      </KeyboardAvoidingView>
+      </Animated.View>
 
       <SnapViewer
         message={openSnap}
-        resolveUrl={resolveUrl}
+        loadSnap={loadSnap}
         onReact={reactSnap}
         onExpire={expireSnap}
         onClose={() => setOpenSnap(null)}

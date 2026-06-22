@@ -195,7 +195,12 @@ export type ChatMessageKind = 'text' | 'snap';
  * signed-in member to delete under their couple path).
  */
 export interface ChatSnap {
-  media: MediaRef;
+  /**
+   * Key under RTDB `snaps/{coupleId}` holding the ephemeral base64 image. The
+   * image is NOT stored in the Firestore message (keeps the chat stream light
+   * and free); the recipient fetches it on open and it's deleted after viewing.
+   */
+  snapId: string;
   /** Seconds the snap stays open after the recipient first views it. */
   viewSeconds: number;
   /** When the recipient first opened it (view receipt). Null until opened. */

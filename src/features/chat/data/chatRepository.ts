@@ -1,13 +1,14 @@
 import { addDoc, doc, limit, orderBy, updateDoc } from 'firebase/firestore';
 import {
-  deleteObject,
-  getDownloadURL,
-  ref as storageRef,
-  uploadBytes,
-} from 'firebase/storage';
+  get as rtdbGet,
+  push,
+  ref as rtdbRef,
+  remove as rtdbRemove,
+  set as rtdbSet,
+} from 'firebase/database';
 import { FirestoreRepository, Unsubscribe } from '@/core/data/Repository';
 import { makeConverter } from '@/core/data/converters';
-import { storage } from '@/core/firebase/client';
+import { rtdb } from '@/core/firebase/client';
 import type { ChatMessage } from '@/types/models';
 
 const converter = makeConverter<ChatMessage>(['createdAt']);
@@ -16,31 +17,15 @@ const converter = makeConverter<ChatMessage>(['createdAt']);
 export const DEFAULT_SNAP_VIEW_SECONDS = 5;
 
 /**
- * Read a local file URI into a real React Native Blob via XMLHttpRequest. This
- * is the one upload path that works in Expo: `fetch().blob()` + `uploadBytes`
- * and `uploadString('base64')` both end up asking RN to build a Blob from an
- * ArrayBuffer, which it doesn't support ("Creating blobs from 'ArrayBuffer'…").
- * The XHR-produced blob is native-backed, so Firebase uploads it directly.
- */
-function uriToBlob(uri: string): Promise<Blob> {
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.onload = () => resolve(xhr.response as Blob);
-    xhr.onerror = () => reject(new Error('Could not read the captured photo.'));
-    xhr.responseType = 'blob';
-    xhr.open('GET', uri, true);
-    xhr.send(null);
-  });
-}
-
-/**
- * Couple chat storage (cost-optimized):
- *  - Messages live under `couples/{coupleId}/messages`, one doc per message.
- *  - Reads happen through ONE live listener on the most recent N messages, so
- *    chatting for two people is a trickle of tiny writes + a single open
- *    subscription — well inside the Firebase Spark free tier.
- *  - Snap photos upload to `couples/{coupleId}/snaps/**`; the recipient deletes
- *    the object after viewing so expiring photos don't accrue Storage quota.
+ * Couple chat storage (cost-optimized, ₹0):
+ *  - Messages live under `couples/{coupleId}/messages` in Firestore, one doc
+ *    per message, read through ONE live listener on the most recent N.
+ *  - Snap PHOTOS are stored as base64 in Realtime Database under
+ *    `snaps/{coupleId}/{snapId}` — NOT in Firestore. This keeps the chat stream
+ *    light (the listener never downloads image bytes), avoids Cloud Storage
+ *    (which now requires the paid Blaze plan), and stays on the free Spark
+ *    tier. The recipient fetches the image only when opening the snap, and it's
+ *    deleted right after — so stored bytes and bandwidth stay near zero.
  */
 export class ChatRepository extends FirestoreRepository<ChatMessage> {
   constructor(private readonly coupleId: string) {
@@ -59,22 +44,17 @@ export class ChatRepository extends FirestoreRepository<ChatMessage> {
   }
 
   /**
-   * Upload a captured photo (local file URI) and post it as an instant snap.
-   * The snap is unopened until the recipient views it.
+   * Post an instant snap: stash the base64 image in RTDB, then write a light
+   * Firestore message pointing at it. Unopened until the recipient views it.
    */
   async sendSnap(
     senderId: string,
-    localUri: string,
+    base64: string,
     opts: { caption?: string; viewSeconds?: number } = {},
   ): Promise<void> {
-    const path = `couples/${this.coupleId}/snaps/${senderId}_${Date.now()}.jpg`;
-    const blob = await uriToBlob(localUri);
-    try {
-      await uploadBytes(storageRef(storage, path), blob, { contentType: 'image/jpeg' });
-    } finally {
-      // RN blobs hold a native allocation until closed.
-      (blob as { close?: () => void }).close?.();
-    }
+    const snapRef = push(rtdbRef(rtdb, `snaps/${this.coupleId}`));
+    const snapId = snapRef.key as string;
+    await rtdbSet(snapRef, base64);
 
     await addDoc(this.col(), {
       coupleId: this.coupleId,
@@ -82,7 +62,7 @@ export class ChatRepository extends FirestoreRepository<ChatMessage> {
       kind: 'snap',
       text: opts.caption ?? '',
       snap: {
-        media: { storagePath: path, kind: 'image' },
+        snapId,
         viewSeconds: opts.viewSeconds ?? DEFAULT_SNAP_VIEW_SECONDS,
         viewedAt: null,
         reaction: null,
@@ -90,9 +70,10 @@ export class ChatRepository extends FirestoreRepository<ChatMessage> {
     } as unknown as ChatMessage);
   }
 
-  /** Resolve a Storage path to a temporary download URL (recipient-only fetch). */
-  resolveUrl(storagePath: string): Promise<string> {
-    return getDownloadURL(storageRef(storage, storagePath));
+  /** Fetch a snap's base64 image at view time. Null if it's already gone. */
+  async loadSnapImage(snapId: string): Promise<string | null> {
+    const snap = await rtdbGet(rtdbRef(rtdb, `snaps/${this.coupleId}/${snapId}`));
+    return snap.exists() ? (snap.val() as string) : null;
   }
 
   /**
@@ -108,10 +89,10 @@ export class ChatRepository extends FirestoreRepository<ChatMessage> {
     await updateDoc(doc(this.db, this.path, messageId), { 'snap.reaction': reaction });
   }
 
-  /** Best-effort delete of the snap's Storage object once it has expired. */
-  async deleteSnapMedia(storagePath: string): Promise<void> {
+  /** Delete the ephemeral image once the snap has been viewed/expired. */
+  async deleteSnapImage(snapId: string): Promise<void> {
     try {
-      await deleteObject(storageRef(storage, storagePath));
+      await rtdbRemove(rtdbRef(rtdb, `snaps/${this.coupleId}/${snapId}`));
     } catch {
       // Already gone, or a transient error — harmless; the view lock already
       // makes the snap unreachable in the UI.

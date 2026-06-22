@@ -10,72 +10,77 @@ const REACTIONS = ['❤️', '😂', '😮', '😍', '🔥'];
 export interface SnapViewerProps {
   /** The snap to show, or null when closed. */
   message: ChatMessage | null;
-  resolveUrl: (storagePath: string) => Promise<string>;
+  /** Fetch the snap's base64 image by its RTDB key. */
+  loadSnap: (snapId: string) => Promise<string | null>;
   onReact: (messageId: string, emoji: string) => void;
-  /** Called once when the snap is dismissed — deletes the Storage object. */
-  onExpire: (storagePath: string) => void;
+  /** Called once when the snap is dismissed — deletes the ephemeral image. */
+  onExpire: (snapId: string) => void;
   onClose: () => void;
 }
 
 /**
  * One-time fullscreen snap viewer. Loads the photo, counts down, lets the
- * recipient react, then disappears for good and best-effort deletes the media.
+ * recipient react, then disappears for good and deletes the ephemeral image.
  */
-export function SnapViewer({ message, resolveUrl, onReact, onExpire, onClose }: SnapViewerProps) {
+export function SnapViewer({ message, loadSnap, onReact, onExpire, onClose }: SnapViewerProps) {
   const theme = useTheme();
   const snap = message?.snap ?? null;
 
-  const [url, setUrl] = useState<string | null>(null);
+  const [uri, setUri] = useState<string | null>(null);
   const [remaining, setRemaining] = useState(0);
   const [reacted, setReacted] = useState<string | null>(null);
   const dismissedRef = useRef(false);
 
-  // Resolve the download URL when a snap opens.
+  // Fetch the image (and reset state) each time a snap opens.
   useEffect(() => {
     if (!message || !snap) return;
     let active = true;
     dismissedRef.current = false;
-    setUrl(null);
+    setUri(null);
     setReacted(snap.reaction);
     setRemaining(snap.viewSeconds);
-    resolveUrl(snap.media.storagePath)
-      .then((u) => active && setUrl(u))
-      .catch(() => active && dismiss()); // media already gone → just close
+    loadSnap(snap.snapId)
+      .then((b64) => {
+        if (!active) return;
+        if (b64) setUri(`data:image/jpeg;base64,${b64}`);
+        else dismiss(); // already gone → just close
+      })
+      .catch(() => active && dismiss());
     return () => {
       active = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [message?.id]);
 
-  // Countdown only starts once the photo is on screen.
+  // Countdown only starts once the photo is on screen. The updater stays pure —
+  // just decrements — so it never triggers a parent update mid-render.
   useEffect(() => {
-    if (!url || !message) return;
+    if (!uri || !message) return;
     const id = setInterval(() => {
-      setRemaining((r) => {
-        if (r <= 1) {
-          clearInterval(id);
-          dismiss();
-          return 0;
-        }
-        return r - 1;
-      });
+      setRemaining((r) => (r <= 1 ? 0 : r - 1));
     }, 1000);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [url, message?.id]);
+  }, [uri, message?.id]);
+
+  // Dismiss as a side effect once the countdown reaches zero (after commit).
+  useEffect(() => {
+    if (uri && remaining === 0) dismiss();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uri, remaining]);
 
   function dismiss() {
     if (dismissedRef.current) return;
     dismissedRef.current = true;
-    if (snap) onExpire(snap.media.storagePath);
+    if (snap) onExpire(snap.snapId);
     onClose();
   }
 
   return (
     <Modal visible={!!message} transparent animationType="fade" onRequestClose={dismiss}>
       <View style={{ flex: 1, backgroundColor: '#000' }}>
-        {url ? (
-          <Image source={{ uri: url }} style={{ flex: 1 }} contentFit="contain" />
+        {uri ? (
+          <Image source={{ uri }} style={{ flex: 1 }} contentFit="contain" />
         ) : (
           <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
             <ActivityIndicator color={theme.colors.primary} />
@@ -119,7 +124,7 @@ export function SnapViewer({ message, resolveUrl, onReact, onExpire, onClose }: 
         ) : null}
 
         {/* Reaction row */}
-        {url && message ? (
+        {uri && message ? (
           <View
             style={{
               position: 'absolute',
