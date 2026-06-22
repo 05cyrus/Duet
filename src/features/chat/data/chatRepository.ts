@@ -14,7 +14,7 @@ import type { ChatMessage } from '@/types/models';
 const converter = makeConverter<ChatMessage>(['createdAt']);
 
 /** Default lifetime a snap stays open after the recipient first views it. */
-export const DEFAULT_SNAP_VIEW_SECONDS = 5;
+export const DEFAULT_SNAP_VIEW_SECONDS = 2;
 
 /**
  * Couple chat storage (cost-optimized, ₹0):
