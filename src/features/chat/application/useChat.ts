@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSession } from '@/core/state/session';
 import { ChatRepository } from '../data/chatRepository';
-import type { ChatMessage } from '@/types/models';
+import type { ChatMessage, ReplyPreview } from '@/types/models';
 
 /**
  * Live couple chat: subscribes once to the most recent messages and exposes
@@ -35,18 +35,18 @@ export function useChat() {
   }, [repo]);
 
   const send = useCallback(
-    (text: string) => {
+    (text: string, replyTo: ReplyPreview | null = null) => {
       const trimmed = text.trim();
       if (!repo || !uid || !trimmed) return Promise.resolve();
-      return repo.send(uid, trimmed);
+      return repo.send(uid, trimmed, replyTo);
     },
     [repo, uid],
   );
 
   const sendSnap = useCallback(
-    (localUri: string, caption?: string) => {
+    (base64: string, caption?: string, replyTo: ReplyPreview | null = null) => {
       if (!repo || !uid) return Promise.resolve();
-      return repo.sendSnap(uid, localUri, { caption });
+      return repo.sendSnap(uid, base64, { caption, replyTo });
     },
     [repo, uid],
   );

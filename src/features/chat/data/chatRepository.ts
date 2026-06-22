@@ -9,7 +9,7 @@ import {
 import { FirestoreRepository, Unsubscribe } from '@/core/data/Repository';
 import { makeConverter } from '@/core/data/converters';
 import { rtdb } from '@/core/firebase/client';
-import type { ChatMessage } from '@/types/models';
+import type { ChatMessage, ReplyPreview } from '@/types/models';
 
 const converter = makeConverter<ChatMessage>(['createdAt']);
 
@@ -33,13 +33,14 @@ export class ChatRepository extends FirestoreRepository<ChatMessage> {
   }
 
   /** Append a text message. `createdAt` is stamped server-side by the converter. */
-  async send(senderId: string, text: string): Promise<void> {
+  async send(senderId: string, text: string, replyTo: ReplyPreview | null = null): Promise<void> {
     await addDoc(this.col(), {
       coupleId: this.coupleId,
       senderId,
       kind: 'text',
       text,
       snap: null,
+      replyTo,
     } as unknown as ChatMessage);
   }
 
@@ -50,7 +51,7 @@ export class ChatRepository extends FirestoreRepository<ChatMessage> {
   async sendSnap(
     senderId: string,
     base64: string,
-    opts: { caption?: string; viewSeconds?: number } = {},
+    opts: { caption?: string; viewSeconds?: number; replyTo?: ReplyPreview | null } = {},
   ): Promise<void> {
     const snapRef = push(rtdbRef(rtdb, `snaps/${this.coupleId}`));
     const snapId = snapRef.key as string;
@@ -67,6 +68,7 @@ export class ChatRepository extends FirestoreRepository<ChatMessage> {
         viewedAt: null,
         reaction: null,
       },
+      replyTo: opts.replyTo ?? null,
     } as unknown as ChatMessage);
   }
 

@@ -4,7 +4,7 @@ import { Text } from 'react-native';
 import { useTheme } from '@/core/theme';
 import { usePushRegistration } from '@/core/notifications/usePushRegistration';
 
-/** 6-tab main app: Home · Love · Camera · Games · Insights · Profile. */
+/** 6-tab main app: Home · Love · Chat · Games · Insights · Profile. */
 function TabIcon({ emoji, color }: { emoji: string; color: string }) {
   return <Text style={{ fontSize: 22, color }}>{emoji}</Text>;
 }
@@ -26,7 +26,15 @@ export default function TabsLayout() {
     >
       <Tabs.Screen name="index" options={{ title: 'Home', tabBarIcon: ({ color }) => <TabIcon emoji="🏠" color={color} /> }} />
       <Tabs.Screen name="love" options={{ title: 'Love', tabBarIcon: ({ color }) => <TabIcon emoji="💞" color={color} /> }} />
-      <Tabs.Screen name="camera" options={{ title: 'Camera', tabBarIcon: ({ color }) => <TabIcon emoji="📸" color={color} /> }} />
+      <Tabs.Screen
+        name="chat"
+        options={{
+          title: 'Chat',
+          headerShown: true,
+          headerTitle: 'Chat 💬',
+          tabBarIcon: ({ color }) => <TabIcon emoji="💬" color={color} />,
+        }}
+      />
       <Tabs.Screen name="games" options={{ title: 'Games', tabBarIcon: ({ color }) => <TabIcon emoji="🎮" color={color} /> }} />
       <Tabs.Screen name="insights" options={{ title: 'Insights', tabBarIcon: ({ color }) => <TabIcon emoji="📊" color={color} /> }} />
       <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarIcon: ({ color }) => <TabIcon emoji="👤" color={color} /> }} />

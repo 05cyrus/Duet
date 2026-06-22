@@ -3,15 +3,18 @@ import { View } from 'react-native';
 import { format } from 'date-fns';
 import { Text } from '@/core/ui';
 import { useTheme } from '@/core/theme';
+import { ReplyQuote } from './ReplyQuote';
 import type { ChatMessage } from '@/types/models';
 
 export interface MessageBubbleProps {
   message: ChatMessage;
   mine: boolean;
+  /** Current user's uid, to label a quoted reply's author. */
+  uid: string | null;
 }
 
 /** A single chat bubble — right-aligned & branded when it's mine. */
-export function MessageBubble({ message, mine }: MessageBubbleProps) {
+export function MessageBubble({ message, mine, uid }: MessageBubbleProps) {
   const theme = useTheme();
   return (
     <View
@@ -27,6 +30,13 @@ export function MessageBubble({ message, mine }: MessageBubbleProps) {
         marginVertical: theme.spacing.xs,
       }}
     >
+      {message.replyTo ? (
+        <ReplyQuote
+          preview={message.replyTo}
+          fromMe={message.replyTo.senderId === uid}
+          onPrimary={mine}
+        />
+      ) : null}
       <Text color={mine ? 'onPrimary' : 'text'}>{message.text}</Text>
       {message.createdAt ? (
         <Text

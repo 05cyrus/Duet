@@ -3,11 +3,14 @@ import { Pressable, View } from 'react-native';
 import { format } from 'date-fns';
 import { Text } from '@/core/ui';
 import { useTheme } from '@/core/theme';
+import { ReplyQuote } from './ReplyQuote';
 import type { ChatMessage } from '@/types/models';
 
 export interface SnapBubbleProps {
   message: ChatMessage;
   mine: boolean;
+  /** Current user's uid, to label a quoted reply's author. */
+  uid: string | null;
   /** Invoked when the recipient taps an unopened snap. */
   onOpen: () => void;
 }
@@ -16,7 +19,7 @@ export interface SnapBubbleProps {
  * A snap inside the chat thread. The photo itself never renders here — only its
  * status — so it can only be seen through the one-time viewer.
  */
-export function SnapBubble({ message, mine, onOpen }: SnapBubbleProps) {
+export function SnapBubble({ message, mine, uid, onOpen }: SnapBubbleProps) {
   const theme = useTheme();
   const snap = message.snap;
   if (!snap) return null;
@@ -49,6 +52,10 @@ export function SnapBubble({ message, mine, onOpen }: SnapBubbleProps) {
         opacity: pressed ? 0.85 : 1,
       })}
     >
+      {message.replyTo ? (
+        <ReplyQuote preview={message.replyTo} fromMe={message.replyTo.senderId === uid} />
+      ) : null}
+
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
         <Text style={{ fontSize: 22 }}>{opened ? '🔓' : '📷'}</Text>
         <View>

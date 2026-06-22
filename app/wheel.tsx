@@ -11,7 +11,7 @@ import Animated, {
   FadeIn,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
-import { formatDistanceToNow } from 'date-fns';
+import { format } from 'date-fns';
 import { Screen, Text, Card, Button } from '@/core/ui';
 import { useTheme } from '@/core/theme';
 import { useWheel, REWARDS } from '@/features/wheel/application/useWheel';
@@ -36,7 +36,7 @@ function slicePath(startDeg: number, endDeg: number) {
 
 export default function WheelScreen() {
   const theme = useTheme();
-  const { spinning, result, beginSpin, finishSpin, history } = useWheel();
+  const { spinning, result, canSpinToday, beginSpin, finishSpin, history } = useWheel();
   const rotation = useSharedValue(0);
   const turns = useRef(0);
 
@@ -45,9 +45,10 @@ export default function WheelScreen() {
   }));
 
   const onSpin = () => {
-    if (spinning) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    if (spinning || !canSpinToday) return;
     const index = beginSpin();
+    if (index == null) return; // daily spin already used
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     const segCenter = index * SEG + SEG / 2;
     turns.current += 5; // full rotations for drama
     const target = turns.current * 360 + (360 - segCenter);
@@ -109,7 +110,18 @@ export default function WheelScreen() {
       ) : null}
 
       <View style={{ height: theme.spacing.lg }} />
-      <Button title={spinning ? 'Spinning…' : '🎡 Spin the wheel'} onPress={onSpin} loading={spinning} variant="gradient" />
+      <Button
+        title={spinning ? 'Spinning…' : canSpinToday ? '🎡 Spin the wheel' : '✅ Come back tomorrow'}
+        onPress={onSpin}
+        loading={spinning}
+        disabled={!canSpinToday}
+        variant="gradient"
+      />
+      {!canSpinToday && !spinning ? (
+        <Text variant="caption" color="textMuted" center style={{ marginTop: theme.spacing.sm }}>
+          You’ve used today’s spin — one per day 💞
+        </Text>
+      ) : null}
 
       {history.spins.length ? (
         <View style={{ marginTop: theme.spacing.xl }}>
@@ -128,7 +140,7 @@ export default function WheelScreen() {
                 <View style={{ flex: 1 }}>
                   <Text variant="label">{s.label}</Text>
                   <Text variant="caption" color="textMuted">
-                    {formatDistanceToNow(s.at, { addSuffix: true })}
+                    {format(s.at, 'd MMM yyyy, h:mm a')}
                   </Text>
                 </View>
               </View>

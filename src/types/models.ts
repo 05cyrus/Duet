@@ -26,7 +26,6 @@ export interface UserPreferences {
     location: boolean;
     mood: boolean;
     heartbeat: boolean;
-    bereal: boolean;
     capsules: boolean;
   };
   locationSharing: 'on' | 'paused';
@@ -188,6 +187,19 @@ export interface InstantSnap {
 export type ChatMessageKind = 'text' | 'snap';
 
 /**
+ * A snapshot of the message being replied to, denormalized onto the reply so
+ * the quoted preview renders with no extra reads and survives even if the
+ * original is later removed.
+ */
+export interface ReplyPreview {
+  id: ID;
+  senderId: ID;
+  kind: ChatMessageKind;
+  /** Body for text; empty for snaps (the UI shows a "📷 Photo" placeholder). */
+  text: string;
+}
+
+/**
  * An "instant snap" sent inside chat: an expiring photo with a view receipt
  * and an optional reaction. Ephemerality is enforced on the recipient side —
  * once `viewedAt` is set the snap can't be reopened, and the recipient
@@ -224,24 +236,9 @@ export interface ChatMessage {
   text: string;
   /** Present only when `kind === 'snap'`. */
   snap: ChatSnap | null;
+  /** Set when this message is a swipe-reply to another. */
+  replyTo: ReplyPreview | null;
   createdAt: Millis;
-}
-
-/* ───────────────────────────── F6 BeReal ──────────────────────────── */
-
-export interface BeRealRound {
-  id: ID; // yyyy-mm-dd
-  coupleId: ID;
-  promptAt: Millis;
-  responses: Record<ID, { media: MediaRef; postedAt: Millis; late: boolean }>;
-  completed: boolean;
-}
-
-export interface BeRealStreak {
-  coupleId: ID;
-  current: number;
-  longest: number;
-  lastCompletedDate: ISODate | null;
 }
 
 /* ─────────────────────── F7 Cards / F17 Games ─────────────────────── */

@@ -12,7 +12,7 @@ import type { UserProfile } from '@/types/models';
 
 const DEFAULT_PREFS: UserProfile['preferences'] = {
   themeMode: 'system',
-  notifications: { location: true, mood: true, heartbeat: true, bereal: true, capsules: true },
+  notifications: { location: true, mood: true, heartbeat: true, capsules: true },
   locationSharing: 'on',
   language: 'en',
 };
